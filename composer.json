@@ -1,0 +1,21 @@
+﻿{
+  "name": "tokvera/tokvera-php",
+  "description": "Preview PHP SDK for Tokvera tracing.",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": "^8.2",
+    "ext-json": "*"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.5"
+  },
+  "autoload": {
+    "files": [
+      "src/TokveraSdk.php"
+    ]
+  },
+  "scripts": {
+    "test": "phpunit"
+  }
+}
