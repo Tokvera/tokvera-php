@@ -11,10 +11,18 @@ use Tokvera\TokveraSdk;
 use Tokvera\TrackOptions;
 use Tokvera\Usage;
 
+$apiBaseUrl = getenv('TOKVERA_API_BASE_URL')
+    ?: (getenv('TOKVERA_INGEST_URL') ? preg_replace('#/v1/events/?$#', '', getenv('TOKVERA_INGEST_URL')) : 'https://api.tokvera.org');
+$feature = getenv('TOKVERA_FEATURE') ?: 'router';
+$tenantId = getenv('TOKVERA_TENANT_ID') ?: 'tenant_demo';
+$environment = getenv('TOKVERA_ENVIRONMENT') ?: 'production';
+
 $tracer = TokveraSdk::createTracer(new TrackOptions([
     'apiKey' => getenv('TOKVERA_API_KEY') ?: 'tok_live_replace_me',
-    'feature' => 'router',
-    'tenantId' => 'tenant_demo',
+    'baseUrl' => $apiBaseUrl,
+    'feature' => $feature,
+    'tenantId' => $tenantId,
+    'environment' => $environment,
     'captureContent' => true,
     'emitLifecycleEvents' => true,
 ]));
