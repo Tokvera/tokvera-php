@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 declare(strict_types=1);
 
@@ -50,6 +50,8 @@ final class TokveraSdkTest extends TestCase
         ]));
         $tracer->finishSpan($root, new FinishSpanOptions(['outcome' => 'success']));
 
+        self::assertNotSame($root->spanId, $child->spanId);
+        self::assertSame($root->spanId, $child->parentSpanId);
         self::assertCount(4, $client->events);
         self::assertSame('in_progress', $client->events[0]['status']);
         self::assertSame('success', $client->events[2]['status']);
@@ -78,9 +80,10 @@ final class TokveraSdkTest extends TestCase
         ]));
 
         self::assertSame('billing', $result->output['label']);
-        self::assertSame('mistral.request', $client->events[1]['event_type']);
-        self::assertSame('mistral', $client->events[1]['provider']);
-        self::assertSame($root->traceId, $client->events[1]['tags']['trace_id']);
+        self::assertCount(1, $client->events);
+        self::assertSame('mistral.request', $client->events[0]['event_type']);
+        self::assertSame('mistral', $client->events[0]['provider']);
+        self::assertSame($root->traceId, $client->events[0]['tags']['trace_id']);
     }
 
     public function testProviderWrapperRequiresProviderResult(): void

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 declare(strict_types=1);
 
@@ -7,10 +7,13 @@ namespace Tokvera;
 use DateTimeImmutable;
 use DateTimeZone;
 use RuntimeException;
+use stdClass;
 use Throwable;
 
 final class TrackOptions
 {
+    /** @var array<string, true> */
+    private array $provided = [];
     public ?string $apiKey = null;
     public ?string $baseUrl = 'https://api.tokvera.org';
     public ?string $feature = null;
@@ -48,9 +51,15 @@ final class TrackOptions
     {
         foreach ($values as $key => $value) {
             if (property_exists($this, $key)) {
+                $this->provided[$key] = true;
                 $this->{$key} = $value;
             }
         }
+    }
+
+    public function wasProvided(string $key): bool
+    {
+        return isset($this->provided[$key]);
     }
 
     public static function merge(self $base, ?self $override = null): self
@@ -60,8 +69,13 @@ final class TrackOptions
             return $merged;
         }
         foreach (get_object_vars($override) as $key => $value) {
+            if ($key === 'provided') {
+                continue;
+            }
             if (is_bool($value)) {
-                $merged->{$key} = $value;
+                if ($override->wasProvided($key)) {
+                    $merged->{$key} = $value;
+                }
                 continue;
             }
             if (is_array($value) && $value !== []) {
@@ -72,6 +86,7 @@ final class TrackOptions
                 $merged->{$key} = $value;
             }
         }
+        $merged->provided = array_merge($merged->provided, $override->provided);
         return $merged;
     }
 }
@@ -257,7 +272,7 @@ final class TokveraTracer
         $handle = new TraceHandle(
             $options?->traceId ?: $merged->traceId ?: $parent->traceId,
             $options?->runId ?: $merged->runId ?: $parent->runId,
-            $options?->spanId ?: $merged->spanId ?: self::id('spn'),
+            $options?->spanId ?: self::id('spn'),
             $options?->parentSpanId ?: $merged->parentSpanId ?: $parent->spanId,
             new DateTimeImmutable('now', new DateTimeZone('UTC')),
             $options?->provider ?: $merged->provider ?: $parent->provider,
@@ -434,13 +449,13 @@ final class TokveraTracer
             'tool_name' => $handle->options->toolName,
             'payload_refs' => $handle->options->payloadRefs,
             'payload_blocks' => array_values(array_merge($handle->options->payloadBlocks, $options->payloadBlocks)),
-            'metrics' => array_merge($handle->options->metrics, $options->metrics, [
+            'metrics' => self::normalizeObjectValue(array_merge($handle->options->metrics, $options->metrics, [
                 'latency_ms' => $latencyMs,
                 'prompt_tokens' => $usage->promptTokens,
                 'completion_tokens' => $usage->completionTokens,
                 'total_tokens' => $usage->totalTokens,
-            ]),
-            'decision' => array_merge($handle->options->decision, $options->decision),
+            ])),
+            'decision' => self::normalizeObjectValue(array_merge($handle->options->decision, $options->decision)),
             'error' => $options->error,
         ];
     }
@@ -475,15 +490,24 @@ final class TokveraTracer
     {
         return $prefix . '_' . bin2hex(random_bytes(12));
     }
+
+    private static function normalizeObjectValue(array $value): array|stdClass
+    {
+        return $value === [] ? new stdClass() : $value;
+    }
 }
 
 final class TokveraOtelBridge
 {
-    public function __construct(private readonly IngestClient $client) {}
+    public function __construct(
+        private readonly TrackOptions $baseOptions,
+        private readonly IngestClient $client,
+    ) {}
 
     public static function create(TrackOptions $options, ?IngestClient $client = null): self
     {
         return new self(
+            $options,
             $client ?? new TokveraClient((string) $options->apiKey, (string) ($options->baseUrl ?? 'https://api.tokvera.org'))
         );
     }
@@ -511,8 +535,8 @@ final class TokveraOtelBridge
                     'total_tokens' => (int) ($attributes['gen_ai.usage.total_tokens'] ?? 0),
                 ],
                 'tags' => [
-                    'feature' => $attributes['tokvera.feature'] ?? 'otel_bridge',
-                    'tenant_id' => $attributes['tokvera.tenant_id'] ?? 'otel',
+                    'feature' => $attributes['tokvera.feature'] ?? ($this->baseOptions->feature ?? 'otel_bridge'),
+                    'tenant_id' => $attributes['tokvera.tenant_id'] ?? ($this->baseOptions->tenantId ?? 'otel'),
                     'trace_id' => $span['trace_id'],
                     'run_id' => $attributes['tokvera.run_id'] ?? $span['trace_id'],
                     'span_id' => $span['span_id'],
